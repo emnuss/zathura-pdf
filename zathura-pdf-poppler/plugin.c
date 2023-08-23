@@ -3,7 +3,6 @@
 #include "plugin.h"
 
 gboolean g_signature_overlay_toggle = true;
-GPtrArray* g_signature_array = NULL; // signature validations on each page will be stored in this array
 
 ZATHURA_PLUGIN_REGISTER_WITH_FUNCTIONS(
   "pdf-poppler",

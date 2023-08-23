@@ -15,7 +15,6 @@
 #include <zathura/plugin-api.h>
 
 extern gboolean g_signature_overlay_toggle;
-extern GPtrArray* g_signature_array;
 
 /**
  * Open a pdf document
