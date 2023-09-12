@@ -33,8 +33,7 @@ void print_validation_result(PopplerSignatureInfo* sig_info) {
   PopplerSignatureStatus sig_status = poppler_signature_info_get_signature_status(sig_info);
   PopplerCertificateStatus cert_status = poppler_signature_info_get_certificate_status(sig_info);
   
-  printf("    signature validation result is: %s\n", sig_status_strings[sig_status]);
-  printf("    certification validation result is: %s\n", cert_status_strings[cert_status]);
+  printf("signature validation result is %s and certification validation result is %s\n", sig_status_strings[sig_status], cert_status_strings[cert_status]);
 }
 
 void cairo_set_color_success(cairo_t* cr) {
@@ -49,18 +48,9 @@ void cairo_set_color_error(cairo_t* cr) {
   cairo_set_source_rgba(cr, 0.92, 0.11, 0.14, SIGNATURE_OVERLAY_OPACITY); // red
 }
 
-void check_signatures(void* data) {
-  printf("found %d signatures.\n", poppler_document_get_n_signatures(data));
-}
-
-
 void hide_signatures(zathura_page_t* zathura_page, PopplerPage *poppler_page, cairo_t *cr) {
   const double page_height = zathura_page_get_height(zathura_page);
-  const int page_index = poppler_page_get_index(poppler_page);
   GList* form_fields = poppler_page_get_form_field_mapping(poppler_page);
-
-  printf("we in hide signature for page %d\n", page_index);
-
 
   for (GList* entry = form_fields; entry && entry->data; entry = g_list_next(entry)) {
     PopplerFormFieldMapping* mapping = (PopplerFormFieldMapping*) entry->data;
@@ -68,7 +58,6 @@ void hide_signatures(zathura_page_t* zathura_page, PopplerPage *poppler_page, ca
     PopplerFormField* form_field = mapping->field;
 
     if (poppler_form_field_get_field_type(form_field) == POPPLER_FORM_FIELD_SIGNATURE) {
-      printf("  Found formfield of type signature.\n");
 
       // build rectangle
       gdouble width = area.x2 - area.x1 - SIGNATURE_OVERLAY_OFFSET;
@@ -77,7 +66,7 @@ void hide_signatures(zathura_page_t* zathura_page, PopplerPage *poppler_page, ca
       gdouble translated_x1 = area.x1 + SIGNATURE_OVERLAY_OFFSET/2 + SIGNATURE_OVERLAY_ADJUST;
       cairo_rectangle(cr, translated_x1, translated_y1, width, height);
 
-      // get signature info (poppler has issues with performing revocation check, therefore disabled for now)
+      // get signature info (Poppler appears to have issues with performing revocation check, therefore disabled for now)
       int flags = POPPLER_SIGNATURE_VALIDATION_FLAG_VALIDATE_CERTIFICATE | POPPLER_SIGNATURE_VALIDATION_FLAG_WITHOUT_OCSP_REVOCATION_CHECK | POPPLER_SIGNATURE_VALIDATION_FLAG_USE_AIA_CERTIFICATE_FETCH;
       PopplerSignatureInfo* sig_info = poppler_form_field_signature_validate_sync(form_field, flags, NULL, NULL);
       print_validation_result(sig_info);
@@ -88,14 +77,13 @@ void hide_signatures(zathura_page_t* zathura_page, PopplerPage *poppler_page, ca
       // start building text
       GPtrArray* text = g_ptr_array_new();
 
-      // define rectangle color
+      // define rectangle color and content
       switch (sig_status) {
       case POPPLER_SIGNATURE_VALID:
-        g_ptr_array_add(text, g_string_new("Signature is valid."));
         
         switch (cert_status) {
         case POPPLER_CERTIFICATE_TRUSTED:
-          g_ptr_array_add(text, g_string_new("Certificate is trusted."));
+          g_ptr_array_add(text, g_string_new("Signature is valid."));
 
           // get signer information
           GDateTime* sig_time = poppler_signature_info_get_local_signing_time(sig_info);
@@ -112,16 +100,19 @@ void hide_signatures(zathura_page_t* zathura_page, PopplerPage *poppler_page, ca
           break;
         case POPPLER_CERTIFICATE_UNTRUSTED_ISSUER:
         case POPPLER_CERTIFICATE_UNKNOWN_ISSUER:
-          g_ptr_array_add(text, g_string_new("Certificate is not trusted."));
-          cairo_set_color_warning(cr);
+          g_ptr_array_add(text, g_string_new("Signature certificate is not trusted."));
+          cairo_set_color_error(cr);
           break;
         case POPPLER_CERTIFICATE_REVOKED:
-        case POPPLER_CERTIFICATE_EXPIRED:
-          g_ptr_array_add(text, g_string_new("Certificate is invalid."));
+          g_ptr_array_add(text, g_string_new("Signature certificate is invalid."));
           cairo_set_color_error(cr);
+          break;
+        case POPPLER_CERTIFICATE_EXPIRED:
+          g_ptr_array_add(text, g_string_new("Signature certificate is expired."));
+          cairo_set_color_warning(cr);
           break;  
-        default:
-          g_ptr_array_add(text, g_string_new("Certificate could not be verified."));
+        default: // CERTIFICATE NOT VERIFIED or GENERIC ERROR
+          g_ptr_array_add(text, g_string_new("Signature certificate could not be verified."));
           cairo_set_color_error(cr);
           break;
         }
@@ -131,7 +122,7 @@ void hide_signatures(zathura_page_t* zathura_page, PopplerPage *poppler_page, ca
       case POPPLER_SIGNATURE_NOT_FOUND:
       case POPPLER_SIGNATURE_NOT_VERIFIED:
         g_ptr_array_add(text, g_string_new("Signature could not be verified."));
-        cairo_set_color_warning(cr);
+        cairo_set_color_error(cr);
         break;
       default: // SIGNATURE INVALID or DIGEST MISMATCH or DECODING ERROR
         g_ptr_array_add(text, g_string_new("Signature is invalid."));
@@ -154,9 +145,6 @@ void hide_signatures(zathura_page_t* zathura_page, PopplerPage *poppler_page, ca
       // free stuff
       g_ptr_array_unref(text);
       poppler_signature_info_free(sig_info);
-    }
-    else {
-      printf("Found other formfield type.\n");
     }
   }
 

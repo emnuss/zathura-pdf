@@ -12,3 +12,4 @@ subprojects/zathura
 
 .vscode/
 pdfs/
+cert/

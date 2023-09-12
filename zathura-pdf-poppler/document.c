@@ -40,9 +40,8 @@ pdf_document_open(zathura_document_t* document)
 
   g_free(file_uri);
 
-  // signature stuff
   if (g_signature_overlay_toggle == true) {
-    check_signatures(poppler_document);
+    printf("found %d signatures.\n", poppler_document_get_n_signatures(poppler_document));
   }
 
   return ZATHURA_ERROR_OK;
